@@ -67,7 +67,7 @@ def elim_rotation(cand_shortlists, reviewer_shortlists, rotation):
         cand_shortlists        Reduced list of candidates' favorite reviewers,
                                in descending order of preference.
 
-        reviewer-shortlists    Nested list of reviewers' favorite candidates,
+        reviewer_shortlists    Nested list of reviewers' favorite candidates,
                                in descending order of preference.
 
         rotation               List of candidates involved in rotation to be eliminated.
@@ -286,6 +286,7 @@ class assignment:
         self.reviewers = reviewers
         self.cand_capacity = cand_capacity
         self.reviewer_capacity = reviewer_capacity
+        self.shortlists_internal = None
 
     def GaleShapley(self, reverse=False, verbose=False):
         """
@@ -390,6 +391,10 @@ class assignment:
                     if c_prefs[0] in cand_shortlists[j]:
                         cand_shortlists[j].remove(c_prefs[0])
                 reviewer_shortlists[c_prefs[0]] = reviewer_shortlists[c_prefs[0]][:dex + 1]
+         
+        # We need this in self.osa()
+        if self.shortlists_internal is None:
+            self.shortlists_internal = deepcopy((cand_shortlists, reviewer_shortlists))
 
         return cand_shortlists, reviewer_shortlists
 
@@ -583,7 +588,7 @@ class assignment:
                             if c in cands_in_t:
                                 # If rotation s removed a reviewer higher in c's preference list
                                 # than the reviewer c is matched with when rotation t is eliminated
-                                if cands[c].index(r) < \
+                                if r in cands[c] and cands[c].index(r) < \
                                    cands[c].index(rotation_poset[t][(cands_in_t.index(c) + 1)
                                                                     % len(cands_in_t)][1]):
                                     if verbose:
@@ -591,7 +596,7 @@ class assignment:
                                     edges.add((s, t))
                                     break
 
-        return edges, rotation_weights, rotation_depths, rotation_key
+        return edges, rotation_poset, rotation_weights, rotation_depths, rotation_key
 
     def draw_rotation_digraph(self, augment=False, opt=True, reverse=False, verbose=False, kwargs={}):
         """
@@ -612,12 +617,14 @@ class assignment:
 
             graph               A NetworkX directed graph describing the dependencies among
                                 the rotations.
+                                
+            (assn)              The optimal pairings, if opt=True.
 
         Uses matplotlib and NetworkX to draw the rotation digraph, which can be visually
         inspected for the minimal cut corresponding to the optimal solution.
         """
 
-        osa_out, edges, rotation_weights, rotation_depths, rotation_key = \
+        assn, r_in_opt, edges, rotation_poset, rotation_weights, rotation_depths, rotation_key = \
             self.osa(reverse, verbose, heavy=True)
         n = len(rotation_weights)
 
@@ -672,7 +679,7 @@ class assignment:
                                 font_color='black')
 
         if opt:
-            r_in_opt = osa_out.x.round() == 1
+            #r_in_opt = osa_out.x.round() == 1
             nx.draw_networkx_nodes(graph,
                                    pos,
                                    nodelist=np.arange(n)[r_in_opt],
@@ -702,7 +709,10 @@ class assignment:
         x0, x1 = plt.ylim()
         plt.ylim(x0, x1 + 0.06 * n**0.5)
 
-        return graph
+        if opt:
+            return graph, assn
+        else:
+            return graph
 
     def osa(self, reverse=False, verbose=False, heavy=False):
         """
@@ -729,7 +739,7 @@ class assignment:
         negative weight of the maximal rotation poset.
         """
 
-        edges, rotation_weights, rotation_depths, rotation_key = \
+        edges, rotation_poset, rotation_weights, rotation_depths, rotation_key = \
             self.rotation_digraph(reverse, verbose)
 
         if not rotation_depths:
@@ -748,8 +758,23 @@ class assignment:
             out = minimize(c, A_ub=A_ub, b_ub=b_ub, bounds=bounds,
                            method='simplex',
                            callback=print if verbose else None)
+        
+        # Get boolean idx of which rotations are used in optimal assignment
+        r_in_opt = out.x.round() == 1
+        
+        # Now we will eliminate the rotations; these are the original shortlists
+        # store when we first rotated.
+        G, H = deepcopy(self.shortlists_internal)
+        
+        rotation_members = np.array([[a for a, _ in rotation_tuples] for rotation_tuples in rotation_poset])
+        for i in rotation_members[r_in_opt]:
+            elim_rotation(G, H, i)
+
+        assn = [(g[0], h[0]) for g, h in zip(G, H)]
+        
+        self.shortlists_internal = None
 
         if heavy:
-            return out, edges, rotation_weights, rotation_depths, rotation_key
+            return assn, r_in_opt, edges, rotation_poset, rotation_weights, rotation_depths, rotation_key
         else:
-            return out
+            return assn, r_in_opt
