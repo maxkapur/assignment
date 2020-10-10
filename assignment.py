@@ -4,6 +4,20 @@ from copy import deepcopy
 import networkx as nx
 import matplotlib.pyplot as plt
 
+"""
+This module provides a lightweight implementation of the Gale-Shapley stable assignment
+(proposal) algorithm and a few tools for exploring the stable assignment polytope,
+including a modified implementation of the optimal stable marriage algorithm (rotation
+algorithm) described in the following reference:
+
+    Irving, Robert W., Paul Leather, and Dan Gusfield. 1987. “An Efficient Algorithm for
+    the ‘Optimal’ Stable Marriage.” Journal of the Association for Computing Machinery 34,
+    no. 3 (July): 532–43.
+
+Many of the imports above are used only in the vizualization methods; if you don't need
+visualization, omit the networksx and matplotlib imports is OK.
+"""
+
 
 def find_rotations(shortlists, verbose=False):
     """
@@ -127,6 +141,7 @@ def preprocessor(cands, reviewers):
     Gale-Shapley does not visit pairings that are further down the list than
     the candidate-optimal stable pairings.
     """
+
     n_cands = len(cands)
     for r, r_prefs in enumerate(reviewers):
         for c in range(n_cands):
@@ -334,7 +349,9 @@ class assignment:
                             shortlists, given elsewhere).
 
         Returns the utility (sum of ranks) associated with the given list of pairings.
+        Future functionality will allow an arbitrary array of pairing weights.
         """
+
         if pairings is None:
             pairings = self.GaleShapley(reverse=reverse)[0]
 
@@ -362,12 +379,13 @@ class assignment:
 
             reviewer_shortlists     Reviewer shortlists.
 
-        After running Gale-Shapley, we obtain a list of candidate-pessimal matches.
-        We may create (candidate-oriented) shortlists for both groups by
-        removing anyone matches worse than these from the reviewers' rankings,
-        and removing the same from the candidates' reduced lists.
+        The output is also written to self.shortlists_internal, if self.shortlists_internal
+        has not been defined yet.
 
-        See Irving et al., 534.
+        After running Gale-Shapley, we obtain a list of candidate-pessimal matches. We may create
+        (candidate-oriented) shortlists for both groups by removing anyone matches worse than
+        these from the reviewers' rankings, and removing the same from the candidates' reduced
+        lists. See Irving et al., 534.
         """
 
         if reverse:
@@ -391,7 +409,7 @@ class assignment:
                     if c_prefs[0] in cand_shortlists[j]:
                         cand_shortlists[j].remove(c_prefs[0])
                 reviewer_shortlists[c_prefs[0]] = reviewer_shortlists[c_prefs[0]][:dex + 1]
-         
+
         # We need this in self.osa()
         if self.shortlists_internal is None:
             self.shortlists_internal = deepcopy((cand_shortlists, reviewer_shortlists))
@@ -408,11 +426,10 @@ class assignment:
 
             cand_shortlists, reviewer_shortlists      See below.
 
-        If you run Gale-Shapley both ways, you get lists of candidate- and
-        reviewer-pessimal matches. Removing matches worse than these from the other
-        party's rankings yields a unique pair of "extra short lists." This
-        further reduction is not necessary for Irving's algorithm, but it is
-        provided for interest and further study.
+        If you run Gale-Shapley both ways, you get lists of candidate- and reviewer-pessimal
+        matches. Removing matches worse than these from the other party's rankings yields a
+        unique pair of "extra short lists." This further reduction is not necessary for Irving's
+        algorithm, but provided for interest and further study.
         """
 
         cand_shortlists = GaleShapley(self.cands, self.reviewers,
@@ -526,17 +543,21 @@ class assignment:
 
             edges               Set of directed edges in the subgraph.
 
-            rotation_weights    Weight of each rotation (node).
+            rotation_poset      List of tuples comprising rotations. The first entry in each
+                                tuple is a candidate, and the second entry is the reviewer
+                                that candidate is currently matched with. (*)
+
+            rotation_weights    Weight of each rotation (node). (*)
 
             rotation_depths     Depth of each rotation (node). Used to check which nodes
                                 are immediate predecessors of others, and also handy
-                                for visualizations.
+                                for visualizations. (*)
 
             rotation_key        Convenience list indicating which rotations (by index)
                                 appear at each depth.
 
         Generates the data for the directed subgraph used to model the optimal marriage
-        a maximum-flow problem. The final two returns are simply passed through from
+        a maximum-flow problem. The starred returns are simply passed through from
         self.rotate().
         """
 
@@ -545,7 +566,7 @@ class assignment:
 
         if not rotation_poset:
             print("No rotations present")
-            return [[], [], [], []]
+            return [[], [], [], [], []]
 
         if reverse:
             cands = self.reviewers
@@ -598,7 +619,8 @@ class assignment:
 
         return edges, rotation_poset, rotation_weights, rotation_depths, rotation_key
 
-    def draw_rotation_digraph(self, augment=False, opt=True, reverse=False, verbose=False, kwargs={}):
+    def draw_rotation_digraph(self, augment=False, opt=True, reverse=False,
+                              verbose=False, kwargs={}):
         """
         Arguments:
 
@@ -617,7 +639,7 @@ class assignment:
 
             graph               A NetworkX directed graph describing the dependencies among
                                 the rotations.
-                                
+
             (assn)              The optimal pairings, if opt=True.
 
         Uses matplotlib and NetworkX to draw the rotation digraph, which can be visually
@@ -679,7 +701,6 @@ class assignment:
                                 font_color='black')
 
         if opt:
-            #r_in_opt = osa_out.x.round() == 1
             nx.draw_networkx_nodes(graph,
                                    pos,
                                    nodelist=np.arange(n)[r_in_opt],
@@ -730,9 +751,11 @@ class assignment:
 
         Returns:
 
-            out               A Scipy OptimizeResult object.
+            out           A Scipy OptimizeResult object.
 
-            (4 others)        Passes through results of self.rotation_digraph() if heavy was enabled.
+            r_in_opt      Boolean index of which rotations are included in the optimal assignment.
+
+            (5 others)    Passes through results of self.rotation_digraph() if heavy was enabled.
 
         Uses Scipy's solver to find the optimal stable assignment from the rotation digraph
         data. Returns a Scipy OptimizeResult object; note that the reported function value
@@ -745,6 +768,9 @@ class assignment:
         if not rotation_depths:
             out = None
         else:
+            if verbose:
+                print("\nOptimizing over rotation set")
+
             c = -np.array(rotation_weights)
 
             A_ub = np.zeros((len(edges), len(rotation_weights)))
@@ -758,23 +784,25 @@ class assignment:
             out = minimize(c, A_ub=A_ub, b_ub=b_ub, bounds=bounds,
                            method='simplex',
                            callback=print if verbose else None)
-        
+
         # Get boolean idx of which rotations are used in optimal assignment
         r_in_opt = out.x.round() == 1
-        
+
         # Now we will eliminate the rotations; these are the original shortlists
         # store when we first rotated.
         G, H = deepcopy(self.shortlists_internal)
-        
-        rotation_members = np.array([[a for a, _ in rotation_tuples] for rotation_tuples in rotation_poset])
+
+        rotation_members = np.array([[a for a, _ in rotation_tuples]
+                                     for rotation_tuples in rotation_poset])
         for i in rotation_members[r_in_opt]:
             elim_rotation(G, H, i)
 
         assn = [(g[0], h[0]) for g, h in zip(G, H)]
-        
+
         self.shortlists_internal = None
 
         if heavy:
-            return assn, r_in_opt, edges, rotation_poset, rotation_weights, rotation_depths, rotation_key
+            return assn, r_in_opt, \
+                   edges, rotation_poset, rotation_weights, rotation_depths, rotation_key
         else:
             return assn, r_in_opt
