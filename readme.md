@@ -9,3 +9,5 @@ This module provides a lightweight implementation of the Gale-Shapley stable ass
 ![An optimal stable assignment](exs/rot_digraph.png)
 
 Please see the Jupyter notebooks in the root directory for usage examples and a mathematical discussion of the rotation algorithm.
+
+The author&rsquo;s homepage is [maxkapur.com](https://www.maxkapur.com/).
