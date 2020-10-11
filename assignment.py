@@ -15,7 +15,7 @@ algorithm) described in the following reference:
     no. 3 (July): 532–43.
 
 Many of the imports above are used only in the vizualization methods; if you don't need
-visualization, omit the networksx and matplotlib imports is OK.
+visualization, omitting the networksx and matplotlib imports is OK.
 """
 
 
@@ -130,16 +130,16 @@ def preprocessor(cands, reviewers):
 
     Returns:
 
-        None; cands and reviewers are modified in-place.
+        cands and reviewers are modified in-place.
 
     Preprocesses desk rejects. When a reviewer has excluded a candidate from
     their ranking, this function automatically removes that reviewer from the
     candidate's list. Occurs in place, and only cands is modified.
 
-    This is not strictly necessary for the Gale-Shapley algorithm to find
-    stable matchings, but it must be done to search for rotations, since
-    Gale-Shapley does not visit pairings that are further down the list than
-    the candidate-optimal stable pairings.
+    This is not strictly necessary for the proposal algorithm to find stable
+    assignments, but it must be done to search for rotations, since the proposal
+    algorithm does not visit pairings that are further down the list than the
+    candidate-optimal stable pairings.
     """
 
     n_cands = len(cands)
@@ -149,9 +149,9 @@ def preprocessor(cands, reviewers):
                 cands[c].remove(r)
 
 
-def GaleShapley(cands, reviewers, cand_capacity=None, reviewer_capacity=None, verbose=False):
+def proposal(cands, reviewers, cand_capacity=None, reviewer_capacity=None, verbose=False):
     """
-    Finds a stable pairing of candidates and reviewers using the Gale-Shapley
+    Finds a stable pairing of candidates and reviewers using the proposal (Gale-Shapley)
     algorithm.
 
     Arguments:
@@ -183,7 +183,7 @@ def GaleShapley(cands, reviewers, cand_capacity=None, reviewer_capacity=None, ve
     """
 
     assert cand_capacity is None or reviewer_capacity is None, \
-        "Many-to-many matching not supported by Gale-Shapley algorithm"
+        "Many-to-many matching not supported by proposal algorithm"
     assert max([max(i) for i in cands]) <= len(reviewers) - 1, \
         "Candidates ranked more reviewers than exist"
     assert max([max(i) for i in reviewers]) <= len(cands) - 1, \
@@ -303,11 +303,11 @@ class assignment:
         self.reviewer_capacity = reviewer_capacity
         self.shortlists_internal = None
 
-    def GaleShapley(self, reverse=False, verbose=False):
+    def proposal(self, reverse=False, verbose=False):
         """
         Arguments:
 
-            reverse=False   If true, runs Gale-Shapley in the reverse direction.
+            reverse=False   If true, runs proposal algorithm in the reverse direction.
                             Returns also appear in reverse order.
 
             verbose=False   If True, prints results of each round.
@@ -320,48 +320,52 @@ class assignment:
                             reviewers who did not reject them (distinct from
                             shortlists, given elsewhere).
 
-        Convenience wrapper to run Gale-Shapley algorithm on inputs.
+        Convenience wrapper to run proposal algorithm on inputs.
         """
 
         if reverse:
-            return GaleShapley(self.reviewers, self.cands,
-                               self.reviewer_capacity, self.cand_capacity, verbose)
+            return proposal(self.reviewers, self.cands,
+                            self.reviewer_capacity, self.cand_capacity, verbose)
         else:
-            return GaleShapley(self.cands, self.reviewers,
-                               self.cand_capacity, self.reviewer_capacity, verbose)
+            return proposal(self.cands, self.reviewers,
+                            self.cand_capacity, self.reviewer_capacity, verbose)
 
-    def cost(self, pairings=None, reverse=False):
+    def cost(self, pairings=None, reverse=False, cost_arr=None):
         """
         Arguments:
 
             pairings=None   List of tuples (i, j), where i is a candidate and j is
-                            the reviewer they are matched with. Uses the Gale-Shapley
-                            pairings if none provided.
+                            the reviewer they are matched with. Uses the proposal
+                            algorithm pairings if none provided.
 
             reverse=False   Enable if reviewer indices are given first.
 
+            cost_arr=None   Array of costs associated with each pairing; sum of candidate
+                            and reviewer rankings used if none supplied.
+
         Returns:
 
-            matches         List of tuples giving candidate-optimal matches.
+            c        Value of cost functions.
 
-            reduction       Cands after deletions; each candidate's list of
-                            reviewers who did not reject them (distinct from
-                            shortlists, given elsewhere).
-
-        Returns the cost (sum of ranks) associated with the given list of pairings.
-        Future functionality will allow an arbitrary array of pairing weights.
+        Returns the cost of (sum of ranks or sum of array entries associated with given
+        pairings) associated with the given assignment.
         """
 
         if pairings is None:
-            pairings = self.GaleShapley(reverse=reverse)[0]
+            pairings = self.proposal(reverse=reverse)[0]
 
         if reverse:
             pairings = [(j, i) for i, j in pairings]
 
         c = 0
 
-        for i, j in pairings:
-            c += self.cands[i].index(j) + self.reviewers[j].index(i)
+        if cost_arr is not None:
+            for i, j in pairings:
+                c += cost_arr[i, j]
+
+        else:
+            for i, j in pairings:
+                c += self.cands[i].index(j) + self.reviewers[j].index(i)
 
         return c
 
@@ -369,7 +373,7 @@ class assignment:
         """
         Arguments:
 
-            reverse=False       Runs Gale-Shapley in the reverse direction.
+            reverse=False       Runs proposal algorithm in the reverse direction.
 
             verbose=False       Self-explanatory.
 
@@ -382,24 +386,24 @@ class assignment:
         The output is also written to self.shortlists_internal, if self.shortlists_internal
         has not been defined yet.
 
-        After running Gale-Shapley, we obtain a list of candidate-pessimal matches. We may create
-        (candidate-oriented) shortlists for both groups by removing anyone matches worse than
-        these from the reviewers' rankings, and removing the same from the candidates' reduced
-        lists. See Irving et al., 534.
+        After running the proposal algorithm, we obtain a list of candidate-pessimal matches.
+        We may create (candidate-oriented) shortlists for both groups by removing any matches
+        worse than these from the reviewers' rankings, and removing the same from the
+        candidates' reduced lists. See Irving et al., 534.
         """
 
         if reverse:
             reviewers_pp = deepcopy(self.reviewers)
             preprocessor(reviewers_pp, self.cands)
-            cand_shortlists = GaleShapley(reviewers_pp, self.cands,
-                                          self.reviewer_capacity, self.cand_capacity, verbose)[1]
+            cand_shortlists = proposal(reviewers_pp, self.cands,
+                                       self.reviewer_capacity, self.cand_capacity, verbose)[1]
             reviewer_shortlists = deepcopy(self.cands)
 
         else:
             cands_pp = deepcopy(self.cands)
             preprocessor(cands_pp, self.reviewers)
-            cand_shortlists = GaleShapley(cands_pp, self.reviewers,
-                                          self.cand_capacity, self.reviewer_capacity, verbose)[1]
+            cand_shortlists = proposal(cands_pp, self.reviewers,
+                                       self.cand_capacity, self.reviewer_capacity, verbose)[1]
             reviewer_shortlists = deepcopy(self.reviewers)
 
         for c, c_prefs in enumerate(cand_shortlists):
@@ -426,16 +430,16 @@ class assignment:
 
             cand_shortlists, reviewer_shortlists      See below.
 
-        If you run Gale-Shapley both ways, you get lists of candidate- and reviewer-pessimal
-        matches. Removing matches worse than these from the other party's rankings yields a
-        unique pair of "extra short lists." This further reduction is not necessary for Irving's
-        algorithm, but provided for interest and further study.
+        If we run the proposal algorithm both ways, we get lists of candidate- and reviewer-
+        pessimal matches. Removing matches worse than these from the other party's rankings
+        yields a unique pair of "extra short lists." This further reduction is not necessary
+        for the rotation algorithm, but provided for interest and further study.
         """
 
-        cand_shortlists = GaleShapley(self.cands, self.reviewers,
-                                      self.cand_capacity, self.reviewer_capacity, verbose)[1]
-        reviewer_shortlists = GaleShapley(self.reviewers, self.cands,
-                                          self.reviewer_capacity, self.cand_capacity, verbose)[1]
+        cand_shortlists = proposal(self.cands, self.reviewers,
+                                   self.cand_capacity, self.reviewer_capacity, verbose)[1]
+        reviewer_shortlists = proposal(self.reviewers, self.cands,
+                                       self.reviewer_capacity, self.cand_capacity, verbose)[1]
 
         for c, c_prefs in enumerate(cand_shortlists):
             if c_prefs:
@@ -453,8 +457,7 @@ class assignment:
         """
         Arguments:
 
-            reverse=False       Runs Gale-Shapley in the reverse direction.
-                                Returns do *not* appear in reverse order.
+            reverse=False       Runs proposal algorithm in the reverse direction.
 
             verbose=False       Self-explanatory.
 
@@ -535,7 +538,7 @@ class assignment:
         """
         Arguments:
 
-            reverse=False       Runs Gale-Shapley in the reverse direction.
+            reverse=False       Runs proposal algorithm in the reverse direction.
 
             verbose=False       Self-explanatory.
 
@@ -630,7 +633,7 @@ class assignment:
 
             opt=True            Whether to highlight the nodes included in the optimal assignment.
 
-            reverse=False       Whether to run Gale-Shapley in the reverse direction.
+            reverse=False       Whether to run proposal algorithm in the reverse direction.
 
             verbose=False       Self-explanatory.
 
@@ -743,7 +746,7 @@ class assignment:
             augment=True        Whether to augment the digraph with sink and source nodes
                                 so that it can be visually inspected for the minimal cut.
 
-            reverse=False       Runs Gale-Shapley in the reverse direction.
+            reverse=False       Runs proposal algorithm in the reverse direction.
 
             verbose=False       Self-explanatory.
 
@@ -784,7 +787,7 @@ class assignment:
 
             out = minimize(c, A_ub=A_ub, b_ub=b_ub, bounds=bounds,
                            method='simplex',
-                           callback=print if verbose else None)
+                           callback=lambda o: print(o, end="\n\n") if verbose else None)
 
         # Get boolean idx of which rotations are used in optimal assignment
         r_in_opt = out.x.round() == 1
