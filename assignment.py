@@ -330,7 +330,7 @@ class assignment:
             return GaleShapley(self.cands, self.reviewers,
                                self.cand_capacity, self.reviewer_capacity, verbose)
 
-    def utility(self, pairings=None, reverse=False):
+    def cost(self, pairings=None, reverse=False):
         """
         Arguments:
 
@@ -348,7 +348,7 @@ class assignment:
                             reviewers who did not reject them (distinct from
                             shortlists, given elsewhere).
 
-        Returns the utility (sum of ranks) associated with the given list of pairings.
+        Returns the cost (sum of ranks) associated with the given list of pairings.
         Future functionality will allow an arbitrary array of pairing weights.
         """
 
@@ -358,12 +358,12 @@ class assignment:
         if reverse:
             pairings = [(j, i) for i, j in pairings]
 
-        util = 0
+        c = 0
 
         for i, j in pairings:
-            util += self.cands[i].index(j) + self.reviewers[j].index(i)
+            c += self.cands[i].index(j) + self.reviewers[j].index(i)
 
-        return util
+        return c
 
     def shortlists(self, reverse=False, verbose=False):
         """
@@ -565,7 +565,8 @@ class assignment:
             self.rotate(reverse, verbose)
 
         if not rotation_poset:
-            print("No rotations present")
+            if verbose:
+                print("No rotations present")
             return [[], [], [], [], []]
 
         if reverse:
