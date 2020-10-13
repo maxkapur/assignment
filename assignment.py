@@ -58,7 +58,7 @@ def find_rotations(shortlists, verbose=False):
                 break
 
             if verbose:
-                print("C{}'s second choice is R{}, currently matched with C{}"
+                print("C{}'s next choice is R{}, currently matched with C{}"
                       .format(i, shortlists[i][1], match))
 
             if match in flag:
@@ -98,21 +98,17 @@ def elim_rotation(cand_shortlists, reviewer_shortlists, rotation):
     if the rotation is not actually present in the cand_shortlists graph.
     """
 
-    for c in rotation:
-        cand_shortlists[c].pop(0)
-
     # Candidates and their new matches
     rotation_tuples = [(c, cand_shortlists[c][0]) for c in rotation]
     removals = []
 
     for c, r in rotation_tuples:
-        # Remove p (anyone worse than c) from r's list
-        for _ in range(len(reviewer_shortlists[r])
-                       - reviewer_shortlists[r].index(c) - 1):
+        # Remove p (anyone same or worse than c) from r's list
+        for _ in range(len(reviewer_shortlists[r]) - reviewer_shortlists[r].index(c)):
             p = reviewer_shortlists[r].pop(-1)
-            removals.append((p, r))
-            # Remove r from candidate p's list as well
+            # Remove r from candidate p's list as well, if it appears
             if r in cand_shortlists[p]:
+                removals.append((p, r))
                 cand_shortlists[p].remove(r)
 
     return removals
@@ -184,9 +180,9 @@ def proposal(cands, reviewers, cand_capacity=None, reviewer_capacity=None, verbo
 
     assert cand_capacity is None or reviewer_capacity is None, \
         "Many-to-many matching not supported by proposal algorithm"
-    assert max([max(i) for i in cands]) <= len(reviewers) - 1, \
+    assert max([max(i) for i in cands if i]) < len(reviewers), \
         "Candidates ranked more reviewers than exist"
-    assert max([max(i) for i in reviewers]) <= len(cands) - 1, \
+    assert max([max(i) for i in reviewers if i]) < len(cands), \
         "Reviewers ranked more candidates than exist"
 
     if cand_capacity is None:
@@ -463,8 +459,8 @@ class assignment:
 
         Returns:
 
-            rotation_poset      List of tuples comprising rotations. The first entry in each
-                                tuple is a candidate, and the second entry is the reviewer
+            rotation_poset      List of tuples comprising rotations. The 0th entry in each
+                                tuple is a candidate, and the 1st entry is the reviewer
                                 that candidate is currently matched with.
 
             rotation_removals   List of tuples comprising matches eliminated by a rotation
@@ -592,7 +588,8 @@ class assignment:
         for d in range(d_max):
             # For each of the rotations at this depth,
             for t in rotation_key[d + 1]:
-                cands_in_t = [a for a, _ in rotation_poset[t]]
+                cands_in_t = [a for a, b in rotation_poset[t]]
+                reviewers_in_t = [b for a, b in rotation_poset[t]]
                 # Inspect the rotations at the preceding depth
                 for s in rotation_key[d]:
 
@@ -608,18 +605,19 @@ class assignment:
                             print("New edge from {} to {} (rule 1)".format(s, t))
                         edges.add((s, t))
 
+                    # A surprisingly simple implementation of rule 2.
+                    # If one of the members of the present rotation was involved
+                    # in a removal in the previous, then this rotation depends on it.
+                    # No need to check the ranks because if they were ranked lower,
+                    # they would've been eliminated in elim_rotation() without adding
+                    # to removal list.
                     else:
                         for c, r in rotation_removals[s]:
-                            if c in cands_in_t:
-                                # If rotation s removed a reviewer higher in c's preference list
-                                # than the reviewer c is matched with when rotation t is eliminated
-                                if r in cands[c] and cands[c].index(r) < \
-                                   cands[c].index(rotation_poset[t][(cands_in_t.index(c) + 1)
-                                                                    % len(cands_in_t)][1]):
-                                    if verbose:
-                                        print("New edge from {} to {} (rule 2)".format(s, t))
-                                    edges.add((s, t))
-                                    break
+                            if c in cands_in_t:  # and r in cands[c]:
+                                if verbose:
+                                    print("New edge from {} to {} (rule 2)".format(s, t))
+                                edges.add((s, t))
+                                break
 
         return edges, rotation_poset, rotation_weights, rotation_depths, rotation_key
 
@@ -652,87 +650,90 @@ class assignment:
 
         assn, r_in_opt, edges, rotation_poset, rotation_weights, rotation_depths, rotation_key = \
             self.osa(reverse, verbose, heavy=True)
-        n = len(rotation_weights)
 
-        if not rotation_depths:
-            return None
+        if rotation_depths:
+            n = len(rotation_weights)
 
-        pos = [[depth, i % (n**0.5)] for i, depth in enumerate(rotation_depths)]
+            pos = [[depth, i % (n**0.5)] for i, depth in enumerate(rotation_depths)]
 
-        labels = {i: i for i in range(n)}
+            labels = {i: i for i in range(n)}
 
-        if augment:
-            # Source and sink
-            labels[n] = 's'
-            labels[n + 1] = 't'
-            pos.append((-1.5, -.33 * n**0.5))
-            pos.append((max(rotation_depths) + 1.5, -.67 * n**0.5))
+            if augment:
+                # Source and sink
+                labels[n] = 's'
+                labels[n + 1] = 't'
+                pos.append((-1.5, -.33 * n**0.5))
+                pos.append((max(rotation_depths) + 1.5, -.67 * n**0.5))
 
-            # Initial edge capacities are inf
-            edges_capacities = [1e16] * len(edges)
+                # Initial edge capacities are inf
+                edges_capacities = [1e16] * len(edges)
 
-            edges_st = []
-            edges_st_capacities = []
+                edges_st = []
+                edges_st_capacities = []
 
-            for i, w in enumerate(rotation_weights):
-                if w < 0:
-                    edges_st.append((n, i))
-                    edges_st_capacities.append(-w)
-                elif w > 0:
-                    edges_st.append((i, n + 1))
-                    edges_st_capacities.append(w)
+                for i, w in enumerate(rotation_weights):
+                    if w < 0:
+                        edges_st.append((n, i))
+                        edges_st_capacities.append(-w)
+                    elif w > 0:
+                        edges_st.append((i, n + 1))
+                        edges_st_capacities.append(w)
 
-        pos = np.array(pos)
+            pos = np.array(pos)
 
-        plt.figure(**kwargs)
-        graph = nx.DiGraph()
-        graph.add_nodes_from(labels)
-        graph.add_edges_from(edges)
-        nx.draw_networkx_nodes(graph,
-                               pos,
-                               nodelist=range(n),
-                               node_color='black')
-        nx.draw_networkx_edges(graph,
-                               pos,
-                               edgelist=edges,
-                               edge_color='seagreen')
-        # Rotation indices
-        nx.draw_networkx_labels(graph, pos, labels, font_color='white')
-        # Rotation weights
-        nx.draw_networkx_labels(graph,
-                                pos + [0, 0.06 * n**0.5],
-                                {i: "({})".format(w) for i, w in enumerate(rotation_weights)},
-                                font_color='black')
-
-        if opt:
+            plt.figure(**kwargs)
+            graph = nx.DiGraph()
+            graph.add_nodes_from(labels)
+            graph.add_edges_from(edges)
             nx.draw_networkx_nodes(graph,
                                    pos,
-                                   nodelist=np.arange(n)[r_in_opt],
-                                   node_color='dodgerblue')
-
-        if augment:
-            nx.draw_networkx_nodes(graph,
-                                   pos,
-                                   nodelist=[n, n + 1],
-                                   node_color='slategray')
-
+                                   nodelist=range(n),
+                                   node_color='black')
             nx.draw_networkx_edges(graph,
                                    pos,
-                                   edgelist=edges_st,
-                                   edge_color='darkorchid',
-                                   label=edges_capacities)
+                                   edgelist=edges,
+                                   edge_color='seagreen')
+            # Rotation indices
+            nx.draw_networkx_labels(graph, pos, labels, font_color='white')
+            # Rotation weights
+            nx.draw_networkx_labels(graph,
+                                    pos + [0, 0.06 * n**0.5],
+                                    {i: "({})".format(w) for i, w in enumerate(rotation_weights)},
+                                    font_color='black')
 
-            props = dict(boxstyle='square', lw=0, fc='white', alpha=0.5)
-            nx.draw_networkx_edge_labels(graph, pos,
-                                         edge_labels={e: r'$\infty$' for e in edges},
-                                         bbox=props)
-            nx.draw_networkx_edge_labels(graph, pos,
-                                         edge_labels={e: l for e, l in
-                                                      zip(edges_st, edges_st_capacities)},
-                                         bbox=props)
+            if opt:
+                nx.draw_networkx_nodes(graph,
+                                       pos,
+                                       nodelist=np.arange(n)[r_in_opt],
+                                       node_color='dodgerblue')
 
-        x0, x1 = plt.ylim()
-        plt.ylim(x0, x1 + 0.06 * n**0.5)
+            if augment:
+                nx.draw_networkx_nodes(graph,
+                                       pos,
+                                       nodelist=[n, n + 1],
+                                       node_color='slategray')
+
+                nx.draw_networkx_edges(graph,
+                                       pos,
+                                       edgelist=edges_st,
+                                       edge_color='darkorchid',
+                                       label=edges_capacities)
+
+                props = dict(boxstyle='square', lw=0, fc='white', alpha=0.5)
+                nx.draw_networkx_edge_labels(graph, pos,
+                                             edge_labels={e: r'$\infty$' for e in edges},
+                                             bbox=props)
+                nx.draw_networkx_edge_labels(graph, pos,
+                                             edge_labels={e: l for e, l in
+                                                          zip(edges_st, edges_st_capacities)},
+                                             bbox=props)
+
+            x0, x1 = plt.ylim()
+            plt.ylim(x0, x1 + 0.06 * n**0.5)
+
+        else:
+            print("No rotations to graph")
+            graph = None
 
         if opt:
             return graph, assn
@@ -769,9 +770,9 @@ class assignment:
         edges, rotation_poset, rotation_weights, rotation_depths, rotation_key = \
             self.rotation_digraph(reverse, verbose)
 
-        if not rotation_depths:
-            out = None
-        else:
+        G, H = deepcopy(self.shortlists_internal)
+
+        if rotation_depths:
             if verbose:
                 print("\nOptimizing over rotation set")
 
@@ -789,19 +790,20 @@ class assignment:
                            method='simplex',
                            callback=lambda o: print(o, end="\n\n") if verbose else None)
 
-        # Get boolean idx of which rotations are used in optimal assignment
-        r_in_opt = out.x.round() == 1
+            # Get boolean idx of which rotations are used in optimal assignment
+            r_in_opt = out.x.round() == 1
 
-        # Now we will eliminate the rotations; these are the original shortlists
-        # store when we first rotated.
-        G, H = deepcopy(self.shortlists_internal)
+            # Now we will eliminate the rotations; these are the original shortlists
+            # store when we first rotated.
+            rotation_members = np.array([[a[0] for a in rotation_tuples]
+                                         for rotation_tuples in rotation_poset], dtype=list)
+            for i in rotation_members[r_in_opt]:
+                elim_rotation(G, H, i)
 
-        rotation_members = np.array([[a for a, _ in rotation_tuples]
-                                     for rotation_tuples in rotation_poset])
-        for i in rotation_members[r_in_opt]:
-            elim_rotation(G, H, i)
+        else:
+            r_in_opt = []
 
-        assn = [(g[0], h[0]) for g, h in zip(G, H)]
+        assn = [(g[0], h[0]) for g, h in zip(G, H) if len(g) >= 1 and len(h) >= 1]
 
         self.shortlists_internal = None
 
