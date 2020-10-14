@@ -245,6 +245,124 @@ def proposal(cands, reviewers, cand_capacity=None, reviewer_capacity=None, verbo
     return matches, reduction
 
 
+def osa_from_rotation_digraph(edges, rotation_poset, rotation_weights,
+                              rotation_depths, rotation_key,
+                              method='hone', verbose=False):
+    """
+    Arguments:
+
+        edges               Set of directed edges in the subgraph.
+
+        rotation_poset      List of tuples comprising rotations. The first entry in each
+                            tuple is a candidate, and the second entry is the reviewer
+                            that candidate is currently matched with.
+
+        rotation_weights    Weight of each rotation (node).
+
+        rotation_depths     Depth of each rotation (node). Used to check which nodes
+                            are immediate predecessors of others, and also handy
+                            for visualizations.
+
+        rotation_key        Convenience list indicating which rotations (by index)
+                            appear at each depth.
+
+        method='hone'       'hone' to use my optimization algorithm, 'simplex'
+                            to use generic simplex.
+
+        verbose=False       Self-explanatory.
+
+    Returns:
+
+        r_in_opt            Boolean index of which rotations are included in the
+                            optimal assignment.
+
+        rotation_members    Lists of members in each rotation, for easy transfer
+                            to elim_rotations().
+
+    You can use the output of assignment.rotation_digraph() as the input.
+    """
+
+    assert method == 'hone' or method == 'simplex', \
+        "Unknown method {}".format(method)
+
+    if method == 'hone':
+        r_in_opt = np.zeros_like(rotation_weights, dtype=bool)
+
+        predecessors = [set() for _ in rotation_weights]
+
+        # Immediate predecessors of each node
+        for a, b in edges:
+            predecessors[b].add(a)
+
+        # Function that recursively finds all of a node's predecessors.
+        # Unused and not particularly efficient.
+        # def pred(i):
+        #     return predecessors[i].union(*(pred(j) for j in predecessors[i]))
+
+        # Marks a node and all of its predecessors as part of the optimal set.
+        def pred_marker(i):
+            r_in_opt[i] = True
+            for j in predecessors[i]:
+                pred_marker(j)
+
+        # Calculates the sum of the weights of a node and all of its predecessors
+        # not currently in the optimal set, i.e. the node's mass at current solution.
+        def pred_mass(inp):
+            def recursor(i):
+                nonlocal out
+                out += rotation_weights[i]
+                for j in predecessors[i]:
+                    if not r_in_opt[j]:
+                        recursor(j)
+            out = 0
+            recursor(inp)
+            return out
+
+        while True:
+            sum0 = r_in_opt.sum()
+            if verbose:
+                print("\nCurrent solution includes these rotations: \n", r_in_opt)
+            for i, w_i in enumerate(rotation_weights):
+                if w_i >= 0:
+                    pm = pred_mass(i)
+                    if verbose:
+                        print("  Including rotation {} will yield change in mass {}".format(i, pm))
+                    if pm >= 0:
+                        if verbose:
+                            print("    Let's include it.")
+                        pred_marker(i)
+
+            # Stop when optimal set not augmented
+            if r_in_opt.sum() == sum0:
+                if verbose:
+                    print("\nSolution did not change. All done.")
+                break
+
+    else:    # Simplex method
+        c = -np.array(rotation_weights)
+
+        A_ub = np.zeros((len(edges), len(rotation_weights)))
+        for k, (i, j) in enumerate(edges):
+            A_ub[k, j] = 1
+            A_ub[k, i] = -1
+        b_ub = np.zeros(len(edges))
+
+        bounds = [(0, 1) for _ in rotation_weights]
+
+        out = minimize(c, A_ub=A_ub, b_ub=b_ub, bounds=bounds,
+                       method='simplex',
+                       callback=lambda o: print(o, end="\n\n") if verbose else None)
+
+        # Get boolean idx of which rotations are used in optimal assignment
+        r_in_opt = out.x.round() == 1
+
+    rotation_members = np.array([[a[0] for a in rotation_tuples]
+                                 for rotation_tuples in rotation_poset],
+                                dtype=list)[r_in_opt].tolist()
+
+    return r_in_opt, rotation_members
+
+
 def viz_prefs(cands, reviewers, kwargs={}):
     """
     Arguments:
@@ -622,7 +740,7 @@ class assignment:
         return edges, rotation_poset, rotation_weights, rotation_depths, rotation_key
 
     def draw_rotation_digraph(self, augment=False, opt=True, reverse=False,
-                              verbose=False, kwargs={}):
+                              method='hone', verbose=False, kwargs={}):
         """
         Arguments:
 
@@ -632,6 +750,9 @@ class assignment:
             opt=True            Whether to highlight the nodes included in the optimal assignment.
 
             reverse=False       Whether to run proposal algorithm in the reverse direction.
+
+            method='hone'       'hone' to use my optimization algorithm, 'simplex'
+                                to use generic simplex.
 
             verbose=False       Self-explanatory.
 
@@ -649,7 +770,7 @@ class assignment:
         """
 
         assn, r_in_opt, edges, rotation_poset, rotation_weights, rotation_depths, rotation_key = \
-            self.osa(reverse, verbose, heavy=True)
+            self.osa(reverse, method, verbose, heavy=True)
 
         if rotation_depths:
             n = len(rotation_weights)
@@ -740,14 +861,14 @@ class assignment:
         else:
             return graph
 
-    def osa(self, reverse=False, verbose=False, heavy=False):
+    def osa(self, reverse=False, method='hone', verbose=False, heavy=False):
         """
         Arguments:
 
-            augment=True        Whether to augment the digraph with sink and source nodes
-                                so that it can be visually inspected for the minimal cut.
-
             reverse=False       Runs proposal algorithm in the reverse direction.
+
+            method='hone'       'hone' to use my optimization algorithm, 'simplex'
+                                to use generic simplex.
 
             verbose=False       Self-explanatory.
 
@@ -776,34 +897,20 @@ class assignment:
             if verbose:
                 print("\nOptimizing over rotation set")
 
-            c = -np.array(rotation_weights)
+            r_in_opt, rotation_members = \
+                osa_from_rotation_digraph(edges, rotation_poset, rotation_weights,
+                                          rotation_depths, rotation_key,
+                                          method, verbose)
 
-            A_ub = np.zeros((len(edges), len(rotation_weights)))
-            for k, (i, j) in enumerate(edges):
-                A_ub[k, j] = 1
-                A_ub[k, i] = -1
-            b_ub = np.zeros(len(edges))
-
-            bounds = [(0, 1) for _ in rotation_weights]
-
-            out = minimize(c, A_ub=A_ub, b_ub=b_ub, bounds=bounds,
-                           method='simplex',
-                           callback=lambda o: print(o, end="\n\n") if verbose else None)
-
-            # Get boolean idx of which rotations are used in optimal assignment
-            r_in_opt = out.x.round() == 1
-
-            # Now we will eliminate the rotations; these are the original shortlists
-            # store when we first rotated.
-            rotation_members = np.array([[a[0] for a in rotation_tuples]
-                                         for rotation_tuples in rotation_poset], dtype=list)
-            for i in rotation_members[r_in_opt]:
+            # Now we will eliminate the rotations; G and H are the original shortlists
+            # stored when we first rotated.
+            for i in rotation_members:
                 elim_rotation(G, H, i)
 
         else:
             r_in_opt = []
 
-        assn = [(g[0], h[0]) for g, h in zip(G, H) if len(g) >= 1 and len(h) >= 1]
+        assn = [(i, g[0]) for i, g in enumerate(G) if len(g) >= 1]
 
         self.shortlists_internal = None
 
