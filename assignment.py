@@ -323,10 +323,12 @@ def osa_from_rotation_digraph(edges, rotation_poset, rotation_weights,
             if verbose:
                 print("\nCurrent solution includes these rotations: \n", r_in_opt)
             for i, w_i in enumerate(rotation_weights):
-                if w_i >= 0:
+                # Neither of these checks are necessary but improves performance
+                if w_i >= 0 and not r_in_opt[i]:
                     pm = pred_mass(i)
                     if verbose:
-                        print("  Including rotation {} will yield change in mass {}".format(i, pm))
+                        print("  Including rotation {} will yield change utility of {}."
+                              .format(i, pm))
                     if pm >= 0:
                         if verbose:
                             print("    Let's include it.")
