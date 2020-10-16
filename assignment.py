@@ -19,6 +19,10 @@ visualization, omitting the networksx and matplotlib imports is OK.
 """
 
 
+# Global config
+default_method = 'simplex'
+
+
 def find_rotations(shortlists, verbose=False):
     """
     Arguments:
@@ -247,7 +251,7 @@ def proposal(cands, reviewers, cand_capacity=None, reviewer_capacity=None, verbo
 
 def osa_from_rotation_digraph(edges, rotation_poset, rotation_weights,
                               rotation_depths, rotation_key,
-                              method='hone', verbose=False):
+                              method=default_method, verbose=False):
     """
     Arguments:
 
@@ -266,7 +270,7 @@ def osa_from_rotation_digraph(edges, rotation_poset, rotation_weights,
         rotation_key        Convenience list indicating which rotations (by index)
                             appear at each depth.
 
-        method='hone'       'hone' to use my optimization algorithm, 'simplex'
+        method              'hone' to use my optimization algorithm, 'simplex'
                             to use generic simplex.
 
         verbose=False       Self-explanatory.
@@ -742,7 +746,7 @@ class assignment:
         return edges, rotation_poset, rotation_weights, rotation_depths, rotation_key
 
     def draw_rotation_digraph(self, augment=False, opt=True, reverse=False,
-                              method='hone', verbose=False, kwargs={}):
+                              method=default_method, verbose=False, kwargs={}):
         """
         Arguments:
 
@@ -753,7 +757,7 @@ class assignment:
 
             reverse=False       Whether to run proposal algorithm in the reverse direction.
 
-            method='hone'       'hone' to use my optimization algorithm, 'simplex'
+            method              'hone' to use my optimization algorithm, 'simplex'
                                 to use generic simplex.
 
             verbose=False       Self-explanatory.
@@ -863,13 +867,13 @@ class assignment:
         else:
             return graph
 
-    def osa(self, reverse=False, method='hone', verbose=False, heavy=False):
+    def osa(self, reverse=False, method=default_method, verbose=False, heavy=False):
         """
         Arguments:
 
             reverse=False       Runs proposal algorithm in the reverse direction.
 
-            method='hone'       'hone' to use my optimization algorithm, 'simplex'
+            method              'hone' to use my optimization algorithm, 'simplex'
                                 to use generic simplex.
 
             verbose=False       Self-explanatory.
