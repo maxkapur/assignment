@@ -411,7 +411,8 @@ def viz_prefs(cands, reviewers, kwargs={}):
 
 class assignment:
 
-    def __init__(self, cands, reviewers, cand_capacity=None, reviewer_capacity=None):
+    def __init__(self, cands, reviewers,
+                 cand_capacity=None, reviewer_capacity=None, cost_arr=None):
         assert max([max(i) for i in cands]) <= len(reviewers) - 1, \
             "Candidates ranked more reviewers than exist"
         assert max([max(i) for i in reviewers]) <= len(cands) - 1, \
@@ -421,6 +422,7 @@ class assignment:
         self.reviewers = reviewers
         self.cand_capacity = cand_capacity
         self.reviewer_capacity = reviewer_capacity
+        self.cost_arr = cost_arr
         self.shortlists_internal = None
 
     def proposal(self, reverse=False, verbose=False):
@@ -460,8 +462,8 @@ class assignment:
 
             reverse=False   Enable if reviewer indices are given first.
 
-            cost_arr=None   Array of costs associated with each pairing; sum of candidate
-                            and reviewer rankings used if none supplied.
+            cost_arr=self.cost_arr   Array of costs associated with each pairing; sum of candidate
+                                     and reviewer rankings used if none supplied.
 
         Returns:
 
@@ -470,6 +472,9 @@ class assignment:
         Returns the cost of (sum of ranks or sum of array entries associated with given
         pairings) associated with the given assignment.
         """
+
+        if cost_arr is None:
+            cost_arr = self.cost_arr
 
         if pairings is None:
             pairings = self.proposal(reverse=reverse)[0]
@@ -628,12 +633,18 @@ class assignment:
                 for r in rotations:
                     rotation_poset.append([(c, G_shortlists[c][0]) for c in r])
 
+                    # Decrease in cost function associated with eliminating this rotation
                     weight = 0
-                    for c in r:
-                        weight += (cands[c].index(G_shortlists[c][0])
-                                   - cands[c].index(G_shortlists[c][1])
-                                   + reviewers[G_shortlists[c][0]].index(c)
-                                   - reviewers[G_shortlists[c][1]].index(c))
+                    if self.cost_arr is not None:
+                        for c in r:
+                            weight += (self.cost_arr[c, G_shortlists[c][0]]
+                                       - self.cost_arr[c, G_shortlists[c][1]])
+                    else:
+                        for c in r:
+                            weight += (cands[c].index(G_shortlists[c][0])
+                                       - cands[c].index(G_shortlists[c][1])
+                                       + reviewers[G_shortlists[c][0]].index(c)
+                                       - reviewers[G_shortlists[c][1]].index(c))
                     rotation_weights.append(weight)
                     rotation_depths.append(depth)
 
@@ -873,8 +884,8 @@ class assignment:
 
             reverse=False       Runs proposal algorithm in the reverse direction.
 
-            method              'hone' to use my optimization algorithm, 'simplex'
-                                to use generic simplex.
+            method=default_method   'hone' to use my optimization algorithm, 'simplex'
+                                    to use generic simplex. Config above.
 
             verbose=False       Self-explanatory.
 
