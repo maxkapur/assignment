@@ -3,6 +3,7 @@ from scipy.optimize import linprog as minimize
 from copy import deepcopy
 import networkx as nx
 import matplotlib.pyplot as plt
+from maxflow import *
 
 """
 This module provides a lightweight implementation of the Gale-Shapley stable assignment
@@ -270,8 +271,9 @@ def osa_from_rotation_digraph(edges, rotation_poset, rotation_weights,
         rotation_key        Convenience list indicating which rotations (by index)
                             appear at each depth.
 
-        method              'hone' to use my optimization algorithm, 'simplex'
-                            to use generic simplex.
+        method              'hone' to use heuristic (moving cones) algorithm, 'simplex'
+                            to use generic simplex, 'maxflow' to use network simplex 
+                            (Ford-Fulkerson) algorithm.
 
         verbose=False       Self-explanatory.
 
@@ -286,10 +288,17 @@ def osa_from_rotation_digraph(edges, rotation_poset, rotation_weights,
     You can use the output of assignment.rotation_digraph() as the input.
     """
 
-    assert method == 'hone' or method == 'simplex', \
+    assert method in 'hone maxflow simplex'.split(), \
         "Unknown method {}".format(method)
 
-    if method == 'hone':
+    # A few trivial cases that tend to produce bugs
+    tmp = np.array(rotation_weights)
+    if np.all(tmp < tol):
+        r_in_opt = np.zeros_like(tmp, dtype=bool)
+    elif np.all(tmp > -tol):
+        r_in_opt = np.ones_like(tmp, dtype=bool)
+
+    elif method == 'hone':  # Moving cones
         r_in_opt = np.zeros_like(rotation_weights, dtype=bool)
 
         predecessors = [set() for _ in rotation_weights]
@@ -343,6 +352,11 @@ def osa_from_rotation_digraph(edges, rotation_poset, rotation_weights,
                 if verbose:
                     print("\nSolution did not change. All done.")
                 break
+        
+    elif method=='maxflow':     # Network flow method
+        am = closure_to_maxflow(edges, rotation_weights)
+        S = maxflow(am, inplace=True)
+        r_in_opt = ~S[:-2]
 
     else:    # Simplex method
         c = -np.array(rotation_weights)
