@@ -355,7 +355,7 @@ def osa_from_rotation_digraph(edges, rotation_poset, rotation_weights,
         
     elif method=='maxflow':     # Network flow method
         am = closure_to_maxflow(edges, rotation_weights)
-        S = maxflow(am, inplace=True)
+        S = maxflow(am, inplace=True, verbose=verbose)
         r_in_opt = ~S[:-2]
 
     else:    # Simplex method

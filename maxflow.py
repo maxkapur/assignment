@@ -123,12 +123,12 @@ def bfs(am, s=None):
     return visited
 
 
-def maxflow(am_in, s=None, t=None, inplace=False): 
+def maxflow(am_in, s=None, t=None, inplace=False, verbose=False): 
     """
     Computes the maximum flow through the adjacency matrix using Ford-Fulkerson
     algorithm. Returns the updated adjacency matrix and S, the set of nodes on
     the source side of the minimal cut. am_in is copied by default; set inplace
-    to true to modify am_in in place and return only S.
+    to True to modify am_in in place and return only S.
     """
     n = am_in.shape[1]
     
@@ -147,6 +147,9 @@ def maxflow(am_in, s=None, t=None, inplace=False):
         am = am_in.copy()
     
     while(True):
+        if verbose:
+            print("\nCapacity adjacency matrix: \n", am.toarray())
+        
         path, cap = dfs_ap(am, s, t)
 
         if path[-1] != t:
