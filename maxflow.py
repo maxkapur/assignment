@@ -1,8 +1,6 @@
 import numpy as np
 from scipy.sparse import coo_matrix
 
-
-
 # Can't use np.inf here because we need inf * False = 0
 inf = 1e32
 tol = 1e-8
