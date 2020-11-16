@@ -848,10 +848,11 @@ class assignment:
             # Rotation indices
             nx.draw_networkx_labels(graph, pos, labels, font_color='white')
             # Rotation weights
-            nx.draw_networkx_labels(graph,
-                                    pos + [0, 0.06 * n**0.5],
-                                    {i: "({})".format(w) for i, w in enumerate(rotation_weights)},
-                                    font_color='black')
+            if not augment:
+                nx.draw_networkx_labels(graph,
+                                        pos + [0, 0.06 * n**0.5],
+                                        {i: "({})".format(w) for i, w in enumerate(rotation_weights)},
+                                        font_color='black')
 
             if opt:
                 nx.draw_networkx_nodes(graph,
@@ -872,9 +873,9 @@ class assignment:
                                        label=edges_capacities)
 
                 props = dict(boxstyle='square', lw=0, fc='white', alpha=0.5)
-                nx.draw_networkx_edge_labels(graph, pos,
-                                             edge_labels={e: r'$\infty$' for e in edges},
-                                             bbox=props)
+#                 nx.draw_networkx_edge_labels(graph, pos,
+#                                              edge_labels={e: r'$\infty$' for e in edges},
+#                                              bbox=props)
                 nx.draw_networkx_edge_labels(graph, pos,
                                              edge_labels={e: l for e, l in
                                                           zip(edges_st, edges_st_capacities)},
