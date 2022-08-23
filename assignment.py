@@ -936,7 +936,7 @@ class assignment:
 
             # Now we will eliminate the rotations; G and H are the original shortlists
             # stored when we first rotated.
-            for i in rotation_members :
+            for i in rotation_members:
                 elim_rotation(G, H, i)
 
         else:
@@ -951,3 +951,4 @@ class assignment:
                    edges, rotation_poset, rotation_weights, rotation_depths, rotation_key
         else:
             return assn, r_in_opt
+        
