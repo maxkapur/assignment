@@ -106,16 +106,19 @@ def elim_rotation(cand_shortlists, reviewer_shortlists, rotation):
     # Candidates and their new matches
     rotation_tuples = [(c, cand_shortlists[c][0]) for c in rotation]
     removals = []
+    rotation = [rotation[-1]] + rotation
 
-    for c, r in rotation_tuples:
-        # Remove p (anyone same or worse than c) from r's list
-        for _ in range(len(reviewer_shortlists[r]) - reviewer_shortlists[r].index(c)):
+    for i, c_r in enumerate(rotation_tuples):
+        c = c_r[0]
+        r = c_r[1]
+        # Remove p (anyone same or worse than rotaion[i]) from r's list
+        for _ in range(len(reviewer_shortlists[r]) - reviewer_shortlists[r].index(rotation[i]) -1):
             p = reviewer_shortlists[r].pop(-1)
             # Remove r from candidate p's list as well, if it appears
             if r in cand_shortlists[p]:
                 removals.append((p, r))
                 cand_shortlists[p].remove(r)
-
+                
     return removals
 
 
@@ -936,7 +939,7 @@ class assignment:
 
             # Now we will eliminate the rotations; G and H are the original shortlists
             # stored when we first rotated.
-            for i in rotation_members:
+            for num, i in enumerate(rotation_members) :
                 elim_rotation(G, H, i)
 
         else:
