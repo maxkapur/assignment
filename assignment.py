@@ -108,7 +108,7 @@ def elim_rotation(cand_shortlists, reviewer_shortlists, rotation):
     removals = []
 
     for i, (c, r) in enumerate(rotation_tuples):
-        # Remove p (anyone same or worse than rotaion[i]) from r's list
+        # Remove p (anyone same or worse than rotation[i]) from r's list
         for _ in range(len(reviewer_shortlists[r]) - reviewer_shortlists[r].index(rotation[i-1]) -1):
             p = reviewer_shortlists[r].pop(-1)
             # Remove r from candidate p's list as well, if it appears
