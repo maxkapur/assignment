@@ -740,7 +740,7 @@ class assignment:
                 cands_in_t = [a for a, b in rotation_poset[t]]
                 reviewers_in_t = [b for a, b in rotation_poset[t]]
                 # Inspect the rotations at the preceding depth
-                for s in rotation_key[d]:
+                for s in range(min(rotation_key[d+1])):
 
                     if (s, t) in edges:
                         if verbose:
